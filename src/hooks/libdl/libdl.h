@@ -1,0 +1,5 @@
+#include "gsym.c"
+#include "dlsym.c"
+#include "dladdr.c"
+#include "dlinfo.c"
+#include "phdr.c"

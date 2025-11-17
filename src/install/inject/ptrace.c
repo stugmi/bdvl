@@ -1,0 +1,118 @@
+#if defined(__aarch64__)
+#define USE_REGSET
+#include <elf.h> /* for NT_PRSTATUS */
+#include <sys/uio.h> /* for struct iovec */
+#endif
+
+static int set_ptrace_error(const char *request_name){
+    int err = errno;
+    switch (err){
+        case EFAULT:
+            return INJERR_INVALID_MEMORY_AREA;
+        case EPERM:
+            return INJERR_PERMISSION;
+        case ESRCH:
+            return INJERR_NO_PROCESS;
+    }
+    
+    return INJERR_OTHER;
+}
+
+int injector__ptrace(int request, pid_t pid, long addr, long data, const char *request_name){
+    hook(CPTRACE);
+    if((long)call(CPTRACE, request, pid, addr, data) != 0)
+        return set_ptrace_error(request_name);
+    return 0;
+}
+
+int injector__attach_process(const injector_t *injector){
+    PTRACE_OR_RETURN(PTRACE_ATTACH, injector, 0, 0);
+    return 0;
+}
+
+int injector__detach_process(const injector_t *injector){
+    PTRACE_OR_RETURN(PTRACE_DETACH, injector, 0, 0);
+    return 0;
+}
+
+int injector__get_regs(const injector_t *injector, struct user_regs_struct *regs){
+#ifdef USE_REGSET
+    struct iovec iovec = { regs, sizeof(*regs) };
+    PTRACE_OR_RETURN(PTRACE_GETREGSET, injector, NT_PRSTATUS, (long)&iovec);
+#else
+    PTRACE_OR_RETURN(PTRACE_GETREGS, injector, 0, (long)regs);
+#endif
+    return 0;
+}
+
+int injector__set_regs(const injector_t *injector, const struct user_regs_struct *regs){
+#ifdef USE_REGSET
+    struct iovec iovec = { (void*)regs, sizeof(*regs) };
+    PTRACE_OR_RETURN(PTRACE_SETREGSET, injector, NT_PRSTATUS, (long)&iovec);
+#else
+    PTRACE_OR_RETURN(PTRACE_SETREGS, injector, 0, (long)regs);
+#endif
+    return 0;
+}
+
+int injector__read(const injector_t *injector, size_t addr, void *buf, size_t len){
+    pid_t pid = injector->pid;
+    long word;
+    char *dest = (char *)buf;
+
+    hook(CPTRACE);
+
+    errno = 0;
+    while(len >= sizeof(long)){
+        word = (long)call(CPTRACE, PTRACE_PEEKTEXT, pid, addr, 0);
+        if(word == -1 && errno != 0)
+            return set_ptrace_error("PTRACE_PEEKTEXT");
+        *(long*)dest = word;
+        addr += sizeof(long);
+        dest += sizeof(long);
+        len  -= sizeof(long);
+    }
+
+    if(len != 0){
+        char *src = (char *)&word;
+        word = (long)call(CPTRACE, PTRACE_PEEKTEXT, pid, addr, 0);
+        if(word == -1 && errno != 0)
+            return set_ptrace_error("PTRACE_PEEKTEXT");
+        
+        while(len--) *(dest++) = *(src++);
+    }
+
+    return 0;
+}
+
+int injector__write(const injector_t *injector, size_t addr, const void *buf, size_t len){
+    pid_t pid = injector->pid;
+    const char *src = (const char *)buf;
+
+    hook(CPTRACE);
+
+    while(len >= sizeof(long)){
+        PTRACE_OR_RETURN(PTRACE_POKETEXT, injector, addr, *(long*)src);
+        addr += sizeof(long);
+        src  += sizeof(long);
+        len  -= sizeof(long);
+    }
+
+    if(len != 0){
+        long word = (long)call(CPTRACE, PTRACE_PEEKTEXT, pid, addr, 0);
+        char *dest = (char*)&word;
+
+        if(word == -1 && errno != 0)
+            return set_ptrace_error("PTRACE_PEEKTEXT");
+
+        while(len--) *(dest++) = *(src++);
+        PTRACE_OR_RETURN(PTRACE_POKETEXT, injector, addr, word);
+    }
+
+    return 0;
+}
+
+int injector__continue(const injector_t *injector){
+    PTRACE_OR_RETURN(PTRACE_CONT, injector, 0, 0);
+    return 0;
+}

